@@ -1,7 +1,10 @@
-﻿using EmployeeManagementAPI.Data;
+﻿using AutoMapper;
+using EmployeeManagementAPI.Data;
+using EmployeeManagementAPI.Dtos;
 using EmployeeManagementAPI.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace EmployeeManagementAPI.Controllers
 {
@@ -10,65 +13,80 @@ namespace EmployeeManagementAPI.Controllers
     public class EmployeeController : ControllerBase
     {
         private readonly AppDbContext _context;
-        public EmployeeController(AppDbContext context)
+        private readonly IMapper _mapper;
+        public EmployeeController(AppDbContext context, IMapper mapper)
         {
             _context = context;
+            _mapper = mapper;
         }
         [HttpGet]
-        public IActionResult Getemployees()
+        public async Task<ActionResult<IEnumerable<EmployeeDto>>> Getemployees()
         {
-            return Ok(_context.Employees);
+            var employee = await _context.Employees.ToListAsync();
+            var employeeDto = _mapper.Map<IEnumerable<EmployeeDto>>(employee);
+            return Ok(employeeDto);
         }
         [HttpGet("{id}")]
-        public IActionResult Getemployee(int id)
+        public async Task<ActionResult<EmployeeDto>> Getemployee(int id)
         {
-            var employee = _context.Employees.Find(id);
+            var employee = await _context.Employees.FindAsync(id);
             if (employee == null)
             {
                 return NotFound();
             }
-            return Ok(employee);
+            var employeeDto = _mapper.Map<EmployeeDto>(employee);
+            return Ok(employeeDto);
         }
         [HttpPost]
-        public IActionResult Addemployee([FromBody] Employee employee)
+        public async Task<ActionResult<EmployeeDto>> Addemployee([FromBody] CreateEmployeeDto employeeDto)
         {
+            var employee = _mapper.Map<Employee>(employeeDto);
             _context.Employees.Add(employee);
-            _context.SaveChanges();
-            return StatusCode(StatusCodes.Status201Created);
+            await _context.SaveChangesAsync();
+            var employeedto = _mapper.Map<EmployeeDto>(employee);
+            return CreatedAtAction("GetEmployee",new {id = employeedto.Id}, employeedto);
         }
         [HttpPut("{id}")]
-        public IActionResult Updateemployee(int id, [FromBody] Employee employee)
+        public async Task<IActionResult> Updateemployee(int id, [FromBody] UpdateEmployeeDto updateEmployeeDto)
         {
-            var emp = _context.Employees.Find(id);
-            if (emp == null)
+            var employee = await _context.Employees.FindAsync(id);
+            if(employee == null)
             {
                 return NotFound();
             }
-            emp.Name = employee.Name;
-            emp.Salary = employee.Salary;
-            emp.JoiningDate = employee.JoiningDate;
-            _context.SaveChanges();
-            return Ok(emp);
+            _mapper.Map(updateEmployeeDto, employee);
+            _context.Entry(employee).State = EntityState.Modified;
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch(DbUpdateConcurrencyException)
+            {
+                throw;
+            }
+            return NoContent();
         }
 
         [HttpDelete("{id}")]
-        public IActionResult Deleteemployee(int id)
+        public async Task<IActionResult> Deleteemployee(int id)
         {
-            var emp = _context.Employees.Find(id);
+            var emp = await _context.Employees.FindAsync(id);
             if (emp == null)
             {
                 return NotFound();
             }
             _context.Employees.Remove(emp);
-            _context.SaveChanges();
-            return Ok(emp);
+            await _context.SaveChangesAsync();
+
+            return NoContent();
         }
 
         [HttpGet("Filter")]
-        public IActionResult Filteremployee(int salary)
+        public async Task<ActionResult<IEnumerable<EmployeeDto>>> Filteremployee(int salary)
         {
-            var employees = _context.Employees.Where(e => e.Salary > salary);
-            return Ok(employees);
+            var employees = await _context.Employees.Where(e => e.Salary > salary).ToListAsync();
+            var employeeDto = _mapper.Map<IEnumerable<EmployeeDto>>(employees);
+            return Ok(employeeDto);
         }
     }
 }
